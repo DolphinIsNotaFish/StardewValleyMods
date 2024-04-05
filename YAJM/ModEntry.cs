@@ -1,7 +1,8 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using StardewModdingAPI;
+using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Characters;
 using System;
@@ -10,7 +11,7 @@ using System.IO;
 
 namespace YAJM
 {
-    public class ModEntry : Mod, IAssetEditor
+    public class ModEntry : Mod
     {
         public static ModEntry context;
 
@@ -31,7 +32,9 @@ namespace YAJM
             Config = Helper.ReadConfig<ModConfig>();
             if (!Config.EnableMod)
                 return;
-
+            
+            Helper.Events.Content.AssetRequested += OnAssetRequested;
+            helper.Events.Display.MenuChanged += OnMenuChanged;
             Helper.Events.Input.ButtonPressed += Input_ButtonPressed;
             Helper.Events.GameLoop.GameLaunched += GameLoop_GameLaunched;
 
@@ -45,13 +48,8 @@ namespace YAJM
                original: AccessTools.Method(typeof(NPC), nameof(NPC.draw), new Type[] { typeof(SpriteBatch), typeof(float) }),
                prefix: new HarmonyMethod(typeof(ModEntry), nameof(ModEntry.NPC_draw_prefix))
             );
-            harmony.Patch(
-               original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.isCollidingPosition), new Type[] { typeof(Microsoft.Xna.Framework.Rectangle), typeof(xTile.Dimensions.Rectangle), typeof(bool), typeof(int), typeof(bool), typeof(Character), typeof(bool), typeof(bool), typeof(bool) }),
-               prefix: new HarmonyMethod(typeof(ModEntry), nameof(ModEntry.GameLocation_isCollidingPosition_prefix))
-            );
 
             horseShadow = Helper.ModContent.Load<Texture2D>(Path.Combine("assets", "horse_shadow.png"));
-            horse = Helper.ModContent.Load<Texture2D>(Path.Combine("assets", "horse.png"));
             
         }
 
@@ -255,25 +253,23 @@ namespace YAJM
             lastYJumpVelocity = Game1.player.yJumpVelocity;
         }
 
-
-        public bool CanEdit<T>(IAssetInfo asset)
+        private void OnMenuChanged(object sender, MenuChangedEventArgs e)
         {
-            if (!Config.EnableMod)
-                return false;
-            if (asset.AssetNameEquals("Animals/Horse"))
-            {
-                return true;
-            }
-
-            return false;
+            Helper.GameContent.InvalidateCache("Animals/Horse");
         }
-        /// <summary>Edit a matched asset.</summary>
-        /// <param name="asset">A helper which encapsulates metadata about an asset and enables changes to it.</param>
-        public void Edit<T>(IAssetData asset)
+
+        private void OnAssetRequested(object sender, AssetRequestedEventArgs e)
         {
-            //Texture2D customTexture = this.Helper.Content.Load<Texture2D>(Path.Combine("assets","horse.png");
-            if(!Config.CustomHorseTexture)
-                asset.AsImage().ReplaceWith(horse);
+            if (!Config.CustomHorseTexture)
+            if (e.Name.IsEquivalentTo("Animals/Horse"))
+            {
+                e.Edit(asset =>
+                {
+                    var editor = asset.AsImage();
+                    Texture2D horse = Helper.ModContent.Load<Texture2D>("assets/horse.png");
+                    editor.PatchImage(horse);
+                });
+            }
         }
     }
 }
